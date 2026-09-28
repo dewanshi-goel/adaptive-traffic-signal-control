@@ -1,0 +1,24 @@
+<routes>
+    <vType id="car" vClass="passenger" length="5" accel="2.6" decel="4.5"
+           sigma="0.5" maxSpeed="13.89"/>
+
+    <!-- HEAVY: West approach (left0A0) -->
+    <flow id="W_straight" type="car" from="left0A0" to="A0right0" begin="0" end="3600" vehsPerHour="350" departLane="best" departSpeed="max"/>
+    <flow id="W_left"     type="car" from="left0A0" to="A0top0"   begin="0" end="3600" vehsPerHour="60"  departLane="best" departSpeed="max"/>
+    <flow id="W_right"    type="car" from="left0A0" to="A0bottom0" begin="0" end="3600" vehsPerHour="80" departLane="best" departSpeed="max"/>
+
+    <!-- HEAVY: East approach (right0A0) -->
+    <flow id="E_straight" type="car" from="right0A0" to="A0left0"  begin="0" end="3600" vehsPerHour="350" departLane="best" departSpeed="max"/>
+    <flow id="E_left"     type="car" from="right0A0" to="A0bottom0" begin="0" end="3600" vehsPerHour="60" departLane="best" departSpeed="max"/>
+    <flow id="E_right"    type="car" from="right0A0" to="A0top0"   begin="0" end="3600" vehsPerHour="80" departLane="best" departSpeed="max"/>
+
+    <!-- LIGHT: North approach (top0A0) -->
+    <flow id="N_straight" type="car" from="top0A0" to="A0bottom0" begin="0" end="3600" vehsPerHour="120" departLane="best" departSpeed="max"/>
+    <flow id="N_left"     type="car" from="top0A0" to="A0right0"  begin="0" end="3600" vehsPerHour="30"  departLane="best" departSpeed="max"/>
+    <flow id="N_right"    type="car" from="top0A0" to="A0left0"   begin="0" end="3600" vehsPerHour="40"  departLane="best" departSpeed="max"/>
+
+    <!-- LIGHT: South approach (bottom0A0) -->
+    <flow id="S_straight" type="car" from="bottom0A0" to="A0top0"   begin="0" end="3600" vehsPerHour="120" departLane="best" departSpeed="max"/>
+    <flow id="S_left"     type="car" from="bottom0A0" to="A0left0"  begin="0" end="3600" vehsPerHour="30"  departLane="best" departSpeed="max"/>
+    <flow id="S_right"    type="car" from="bottom0A0" to="A0right0" begin="0" end="3600" vehsPerHour="40"  departLane="best" departSpeed="max"/>
+</routes>
