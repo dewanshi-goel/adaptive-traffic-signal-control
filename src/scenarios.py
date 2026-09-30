@@ -46,3 +46,24 @@ def write_all():
             f.write("\n".join(lines))
         paths[name] = path
     return paths
+
+
+def add_emergency(route_path, rate_per_hour=4.5):
+    """Appends emergency-vehicle flows (one per approach) to an existing route file."""
+    per_edge = rate_per_hour / 4 / 3600.0  # probability per second, per approach
+    lines = [
+        '    <vType id="emergency" vClass="emergency" length="6" accel="3.0" '
+        'decel="5.0" sigma="0.2" maxSpeed="20.0" guiShape="emergency" color="1,0,0"/>'
+    ]
+    for edge, turns in TURNS.items():
+        dest = turns["straight"]
+        lines.append(
+            f'    <flow id="EMG_{edge}" type="emergency" from="{edge}" to="{dest}" '
+            f'begin="0" end="3600" probability="{per_edge:.6f}" '
+            f'departLane="best" departSpeed="max"/>')
+
+    with open(route_path, "r") as f:
+        content = f.read()
+    content = content.replace("</routes>", "\n".join(lines) + "\n</routes>")
+    with open(route_path, "w") as f:
+        f.write(content)

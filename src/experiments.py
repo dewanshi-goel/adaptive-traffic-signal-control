@@ -3,7 +3,7 @@ import pandas as pd
 from scenarios import write_all
 from run_sim import run, OUT
 
-SEEDS = range(1, 6)     # 5 random seeds; change to range(1, 11) for the final report
+SEEDS = range(1, 6)     
 METRICS = ["avg_waiting_time_s", "avg_queue_length_veh", "avg_travel_time_s",
            "throughput_veh_in_first_hour", "max_wait_any_vehicle_s",
            "worst_approach_avg_wait_s", "unfinished_veh"]

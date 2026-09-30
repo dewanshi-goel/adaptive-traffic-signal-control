@@ -16,20 +16,28 @@ INCOMING = ["left0A0", "right0A0", "top0A0", "bottom0A0"]
 DEMAND_END = 3600
 MAX_STEPS = 7200
 
-# ---- adaptive controller settings ----
 TL = "A0"
-AXES = {0: ["top0A0", "bottom0A0"],    # green phase 0 serves north-south
-        2: ["left0A0", "right0A0"]}    # green phase 2 serves east-west
+AXES = {0: ["top0A0", "bottom0A0"],
+        2: ["left0A0", "right0A0"]}
 MIN_GREEN = 10
 MAX_GREEN = 60
 MAX_RED_WAIT = 60
 WAIT_WEIGHT = 0.05
+DETECTION_RANGE = 150  # meters from the stop line
 
 
 class AdaptiveController:
-    def __init__(self):
+    def __init__(self, emergency_aware=True):
         self.last_phase = None
         self.green_elapsed = 0
+        self.emergency_aware = emergency_aware
+        self.preemptions = []   # log: (time, from_phase, to_phase)
+        self._lane_len_cache = {}
+
+    def lane_length(self, edge):
+        if edge not in self._lane_len_cache:
+            self._lane_len_cache[edge] = traci.lane.getLength(edge + "_0")
+        return self._lane_len_cache[edge]
 
     def axis_stats(self, edges):
         queue = sum(traci.edge.getLastStepHaltingNumber(e) for e in edges)
@@ -40,8 +48,19 @@ class AdaptiveController:
                 max_wait = max(max_wait, traci.vehicle.getWaitingTime(vid))
         return queue, total_wait, max_wait
 
+    def emergency_near(self, edges):
+        """True if an emergency vehicle is within DETECTION_RANGE of the stop line."""
+        for e in edges:
+            for vid in traci.edge.getLastStepVehicleIDs(e):
+                if traci.vehicle.getTypeID(vid) == "emergency":
+                    dist = self.lane_length(e) - traci.vehicle.getLanePosition(vid)
+                    if dist <= DETECTION_RANGE:
+                        return True
+        return False
+
     def step(self):
         phase = traci.trafficlight.getPhase(TL)
+        now = traci.simulation.getTime()
 
         if phase != self.last_phase:
             self.last_phase = phase
@@ -53,10 +72,23 @@ class AdaptiveController:
             return
 
         self.green_elapsed += 1
+        other = 2 if phase == 0 else 0
+
+        if self.emergency_aware:
+            # Never abandon an emergency vehicle still on the current green axis.
+            if self.emergency_near(AXES[phase]):
+                return
+            # Preempt toward a red axis carrying an emergency vehicle, once a short
+            # minimum has passed so the light doesn't flicker on detection noise.
+            if self.green_elapsed >= 2 and self.emergency_near(AXES[other]):
+                traci.trafficlight.setPhase(TL, phase + 1)
+                traci.trafficlight.setPhaseDuration(TL, 3)
+                self.preemptions.append((now, phase, other))
+                return
+
         if self.green_elapsed < MIN_GREEN:
             return
 
-        other = 2 if phase == 0 else 0
         g_queue, g_wait, _ = self.axis_stats(AXES[phase])
         r_queue, r_wait, r_max = self.axis_stats(AXES[other])
         g_score = g_queue + WAIT_WEIGHT * g_wait
@@ -71,14 +103,14 @@ class AdaptiveController:
             traci.trafficlight.setPhaseDuration(TL, 3)
 
 
-def run(mode, seed=42, route_file=None, save=True, verbose=True):
+def run(mode, seed=42, route_file=None, save=True, verbose=True, emergency_aware=True):
     cmd = ["sumo", "-c", CFG, "--seed", str(seed), "--no-step-log", "true"]
     if route_file:
         cmd += ["--route-files", route_file]
     traci.start(cmd)
-    controller = AdaptiveController() if mode == "adaptive" else None
+    controller = AdaptiveController(emergency_aware) if mode == "adaptive" else None
 
-    depart, waiting, origin = {}, {}, {}
+    depart, waiting, origin, vtype = {}, {}, {}, {}
     travel_times, rows = [], []
     arrived_in_window = 0
     step = 0
@@ -93,6 +125,7 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True):
             depart[vid] = now
             waiting[vid] = 0.0
             origin[vid] = traci.vehicle.getRoadID(vid)
+            vtype[vid] = traci.vehicle.getTypeID(vid)
 
         for vid in traci.vehicle.getIDList():
             if traci.vehicle.getSpeed(vid) < 0.1:
@@ -121,15 +154,22 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True):
         vals = [w for v, w in waiting.items() if origin[v] == edge]
         per_approach[edge] = sum(vals) / len(vals) if vals else 0.0
 
+    emg_waits = [w for v, w in waiting.items() if vtype.get(v) == "emergency"]
+    reg_waits = [w for v, w in waiting.items() if vtype.get(v) != "emergency"]
+
     summary = {
-        "avg_waiting_time_s": sum(waiting.values()) / len(waiting),
+        "avg_waiting_time_s": sum(reg_waits) / len(reg_waits) if reg_waits else 0.0,
         "avg_queue_length_veh": ts["total_queue"].mean(),
         "avg_travel_time_s": sum(travel_times) / len(travel_times),
         "throughput_veh_in_first_hour": arrived_in_window,
-        "max_wait_any_vehicle_s": max(waiting.values()),
+        "max_wait_any_vehicle_s": max(reg_waits) if reg_waits else 0.0,
         "worst_approach_avg_wait_s": max(per_approach.values()),
         "unfinished_veh": len(depart) - len(travel_times),
         "sim_end_time_s": now,
+        "emergency_count": len(emg_waits),
+        "emergency_avg_wait_s": sum(emg_waits) / len(emg_waits) if emg_waits else 0.0,
+        "emergency_max_wait_s": max(emg_waits) if emg_waits else 0.0,
+        "preemption_count": len(controller.preemptions) if controller else 0,
     }
 
     if save:
@@ -138,7 +178,7 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True):
     if verbose:
         print(f"--- {mode} (seed {seed}) ---")
         for k, v in summary.items():
-            print(f"{k}: {v:.2f}")
+            print(f"{k}: {v:.2f}" if isinstance(v, float) else f"{k}: {v}")
         for edge, w in per_approach.items():
             print(f"  avg wait, approach {edge}: {w:.2f}")
     return summary
