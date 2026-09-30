@@ -3,4 +3,7 @@ avg_waiting_time_s,2.6845588235294118
 avg_queue_length_veh,0.9577039274924471
 avg_travel_time_s,54.243382352941175
 throughput_veh_in_first_hour,1346.0
+max_wait_any_vehicle_s,16.0
+worst_approach_avg_wait_s,3.0631578947368423
+unfinished_veh,0.0
 sim_end_time_s,3641.0

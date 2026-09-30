@@ -20,10 +20,10 @@ MAX_STEPS = 7200
 TL = "A0"
 AXES = {0: ["top0A0", "bottom0A0"],    # green phase 0 serves north-south
         2: ["left0A0", "right0A0"]}    # green phase 2 serves east-west
-MIN_GREEN = 10        # never switch before this many seconds of green
-MAX_GREEN = 60        # switch after this long if the other side is waiting
-MAX_RED_WAIT = 60     # fairness: no single vehicle may wait longer than this
-WAIT_WEIGHT = 0.05    # how much accumulated waiting time counts vs queue size
+MIN_GREEN = 10
+MAX_GREEN = 60
+MAX_RED_WAIT = 60
+WAIT_WEIGHT = 0.05
 
 
 class AdaptiveController:
@@ -43,13 +43,13 @@ class AdaptiveController:
     def step(self):
         phase = traci.trafficlight.getPhase(TL)
 
-        if phase != self.last_phase:            # a new phase has just started
+        if phase != self.last_phase:
             self.last_phase = phase
             self.green_elapsed = 0
-            if phase in AXES:                   # hold this green until we decide
+            if phase in AXES:
                 traci.trafficlight.setPhaseDuration(TL, 1000)
 
-        if phase not in AXES:                   # yellow phase: let it finish
+        if phase not in AXES:
             return
 
         self.green_elapsed += 1
@@ -67,15 +67,19 @@ class AdaptiveController:
         red_needs_it_more = r_score > 1.5 * g_score + 1
 
         if starving or overrun or red_needs_it_more:
-            traci.trafficlight.setPhase(TL, phase + 1)      # go to yellow
+            traci.trafficlight.setPhase(TL, phase + 1)
             traci.trafficlight.setPhaseDuration(TL, 3)
 
 
-def run(mode):
-    traci.start(["sumo", "-c", CFG, "--seed", "42", "--no-step-log", "true"])
+def run(mode, seed=42, route_file=None, save=True, verbose=True):
+    cmd = ["sumo", "-c", CFG, "--seed", str(seed), "--no-step-log", "true"]
+    if route_file:
+        cmd += ["--route-files", route_file]
+    traci.start(cmd)
     controller = AdaptiveController() if mode == "adaptive" else None
 
-    depart, waiting, travel_times, rows = {}, {}, [], []
+    depart, waiting, origin = {}, {}, {}
+    travel_times, rows = [], []
     arrived_in_window = 0
     step = 0
     now = 0
@@ -88,6 +92,7 @@ def run(mode):
         for vid in traci.simulation.getDepartedIDList():
             depart[vid] = now
             waiting[vid] = 0.0
+            origin[vid] = traci.vehicle.getRoadID(vid)
 
         for vid in traci.vehicle.getIDList():
             if traci.vehicle.getSpeed(vid) < 0.1:
@@ -110,23 +115,38 @@ def run(mode):
 
     ts = pd.DataFrame(rows)
     ts["total_queue"] = ts[INCOMING].sum(axis=1)
-    ts.to_csv(os.path.join(OUT, f"{mode}_timeseries.csv"), index=False)
+
+    per_approach = {}
+    for edge in INCOMING:
+        vals = [w for v, w in waiting.items() if origin[v] == edge]
+        per_approach[edge] = sum(vals) / len(vals) if vals else 0.0
 
     summary = {
         "avg_waiting_time_s": sum(waiting.values()) / len(waiting),
         "avg_queue_length_veh": ts["total_queue"].mean(),
         "avg_travel_time_s": sum(travel_times) / len(travel_times),
         "throughput_veh_in_first_hour": arrived_in_window,
+        "max_wait_any_vehicle_s": max(waiting.values()),
+        "worst_approach_avg_wait_s": max(per_approach.values()),
+        "unfinished_veh": len(depart) - len(travel_times),
         "sim_end_time_s": now,
     }
-    pd.Series(summary).to_csv(os.path.join(OUT, f"{mode}_summary.csv"))
-    print(f"--- {mode} ---")
-    for k, v in summary.items():
-        print(f"{k}: {v:.2f}")
+
+    if save:
+        ts.to_csv(os.path.join(OUT, f"{mode}_timeseries.csv"), index=False)
+        pd.Series(summary).to_csv(os.path.join(OUT, f"{mode}_summary.csv"))
+    if verbose:
+        print(f"--- {mode} (seed {seed}) ---")
+        for k, v in summary.items():
+            print(f"{k}: {v:.2f}")
+        for edge, w in per_approach.items():
+            print(f"  avg wait, approach {edge}: {w:.2f}")
+    return summary
 
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "fixed"
+    seed = int(sys.argv[2]) if len(sys.argv) > 2 else 42
     if mode not in ("fixed", "adaptive"):
-        sys.exit("usage: python src/run_sim.py [fixed|adaptive]")
-    run(mode)
+        sys.exit("usage: python src/run_sim.py [fixed|adaptive] [seed]")
+    run(mode, seed=seed)
