@@ -1,0 +1,13 @@
+,0
+avg_waiting_time_s,9.0
+avg_queue_length_veh,3.2454172366621066
+avg_travel_time_s,60.069117647058825
+throughput_veh_in_first_hour,1343.0
+max_wait_any_vehicle_s,71.0
+worst_approach_avg_wait_s,25.057894736842105
+unfinished_veh,0.0
+sim_end_time_s,3655.0
+emergency_count,0.0
+emergency_avg_wait_s,0.0
+emergency_max_wait_s,0.0
+preemption_count,0.0

@@ -7,6 +7,8 @@ if "SUMO_HOME" not in os.environ:
 sys.path.append(os.path.join(os.environ["SUMO_HOME"], "tools"))
 import traci
 
+from scenarios import SCENARIOS
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG = os.path.join(HERE, "..", "sumo", "sim.sumocfg")
 OUT = os.path.join(HERE, "..", "results")
@@ -23,7 +25,43 @@ MIN_GREEN = 10
 MAX_GREEN = 60
 MAX_RED_WAIT = 60
 WAIT_WEIGHT = 0.05
-DETECTION_RANGE = 150  # meters from the stop line
+DETECTION_RANGE = 150
+
+# ---- demand-matched fixed-time baseline settings ----
+CYCLE_GREEN = 84          # same total green as the default 42 + 42
+MIN_TUNED_GREEN = 15      # no road gets less than this
+
+
+def tuned_split(volumes):
+    """Split CYCLE_GREEN between the two axes in proportion to their busiest approach."""
+    ns = max(volumes["top0A0"], volumes["bottom0A0"])
+    ew = max(volumes["left0A0"], volumes["right0A0"])
+    total = ns + ew
+    g_ns = round(CYCLE_GREEN * ns / total) if total else CYCLE_GREEN // 2
+    g_ns = min(max(g_ns, MIN_TUNED_GREEN), CYCLE_GREEN - MIN_TUNED_GREEN)
+    return g_ns, CYCLE_GREEN - g_ns
+
+
+class TunedFixedController:
+    """Fixed-time light with a demand-matched green split. No sensing, no adaptation."""
+    def __init__(self, g_ns, g_ew):
+        self.greens = {0: g_ns, 2: g_ew}
+        self.last_phase = None
+        self.elapsed = 0
+
+    def step(self):
+        phase = traci.trafficlight.getPhase(TL)
+        if phase != self.last_phase:
+            self.last_phase = phase
+            self.elapsed = 0
+            if phase in AXES:
+                traci.trafficlight.setPhaseDuration(TL, 1000)
+        if phase not in AXES:
+            return
+        self.elapsed += 1
+        if self.elapsed >= self.greens[phase]:
+            traci.trafficlight.setPhase(TL, phase + 1)
+            traci.trafficlight.setPhaseDuration(TL, 3)
 
 
 class AdaptiveController:
@@ -31,7 +69,7 @@ class AdaptiveController:
         self.last_phase = None
         self.green_elapsed = 0
         self.emergency_aware = emergency_aware
-        self.preemptions = []   # log: (time, from_phase, to_phase)
+        self.preemptions = []
         self._lane_len_cache = {}
 
     def lane_length(self, edge):
@@ -49,7 +87,6 @@ class AdaptiveController:
         return queue, total_wait, max_wait
 
     def emergency_near(self, edges):
-        """True if an emergency vehicle is within DETECTION_RANGE of the stop line."""
         for e in edges:
             for vid in traci.edge.getLastStepVehicleIDs(e):
                 if traci.vehicle.getTypeID(vid) == "emergency":
@@ -75,11 +112,8 @@ class AdaptiveController:
         other = 2 if phase == 0 else 0
 
         if self.emergency_aware:
-            # Never abandon an emergency vehicle still on the current green axis.
             if self.emergency_near(AXES[phase]):
                 return
-            # Preempt toward a red axis carrying an emergency vehicle, once a short
-            # minimum has passed so the light doesn't flicker on detection noise.
             if self.green_elapsed >= 2 and self.emergency_near(AXES[other]):
                 traci.trafficlight.setPhase(TL, phase + 1)
                 traci.trafficlight.setPhaseDuration(TL, 3)
@@ -103,12 +137,26 @@ class AdaptiveController:
             traci.trafficlight.setPhaseDuration(TL, 3)
 
 
-def run(mode, seed=42, route_file=None, save=True, verbose=True, emergency_aware=True):
+def run(mode, seed=42, route_file=None, save=True, verbose=True,
+        emergency_aware=True, volumes=None):
+    """mode: 'fixed' (default 42/42), 'tuned' (demand-matched fixed), or 'adaptive'."""
+    if mode == "tuned" and volumes is None:
+        raise ValueError("tuned mode needs the scenario's volumes")
+
     cmd = ["sumo", "-c", CFG, "--seed", str(seed), "--no-step-log", "true"]
     if route_file:
         cmd += ["--route-files", route_file]
     traci.start(cmd)
-    controller = AdaptiveController(emergency_aware) if mode == "adaptive" else None
+
+    if mode == "adaptive":
+        controller = AdaptiveController(emergency_aware)
+    elif mode == "tuned":
+        g_ns, g_ew = tuned_split(volumes)
+        controller = TunedFixedController(g_ns, g_ew)
+        if verbose:
+            print(f"tuned fixed-time split: north-south {g_ns} s, east-west {g_ew} s")
+    else:
+        controller = None
 
     depart, waiting, origin, vtype = {}, {}, {}, {}
     travel_times, rows = [], []
@@ -169,7 +217,7 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True, emergency_aware
         "emergency_count": len(emg_waits),
         "emergency_avg_wait_s": sum(emg_waits) / len(emg_waits) if emg_waits else 0.0,
         "emergency_max_wait_s": max(emg_waits) if emg_waits else 0.0,
-        "preemption_count": len(controller.preemptions) if controller else 0,
+        "preemption_count": len(getattr(controller, "preemptions", [])),
     }
 
     if save:
@@ -187,6 +235,7 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True, emergency_aware
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "fixed"
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else 42
-    if mode not in ("fixed", "adaptive"):
-        sys.exit("usage: python src/run_sim.py [fixed|adaptive] [seed]")
-    run(mode, seed=seed)
+    if mode not in ("fixed", "tuned", "adaptive"):
+        sys.exit("usage: python src/run_sim.py [fixed|tuned|adaptive] [seed]")
+    # the default routes.rou.xml is the 'lopsided' scenario
+    run(mode, seed=seed, volumes=SCENARIOS["lopsided"] if mode == "tuned" else None)

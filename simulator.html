@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adaptive Traffic Signal Control — Try It</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --asphalt:#15171a; --asphalt2:#1d2024; --road:#26292e; --lane:#e8e6df; --lane-dim:#9a9a92;
+  --amber:#f0a93e; --green:#3ec87a; --red:#e2483d; --card:#1a1d21; --border:#2a2e33; --car:#6fa8dc;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--asphalt);color:var(--lane);font-family:Inter,system-ui,sans-serif;}
+body{padding:0 0 64px;}
+.wrap{max-width:1100px;margin:0 auto;padding:0 24px;}
+header.hero{padding:56px 24px 36px;text-align:center;border-bottom:1px solid var(--border);}
+header.hero h1{font-size:clamp(26px,4vw,40px);font-weight:800;margin:0 0 10px;letter-spacing:-0.02em;}
+header.hero p{color:var(--lane-dim);font-size:15px;max-width:600px;margin:0 auto;line-height:1.5;}
+section{padding:40px 24px;border-bottom:1px solid var(--border);}
+section h2{font-size:20px;font-weight:700;margin:0 0 6px;}
+section .sub{color:var(--lane-dim);font-size:13px;margin:0 0 24px;max-width:600px;line-height:1.5;}
+
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;}
+@media(max-width:640px){.form-grid{grid-template-columns:repeat(2,1fr);}}
+.field{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.field label{display:block;font-size:11px;color:var(--lane-dim);font-family:'JetBrains Mono',monospace;margin-bottom:8px;}
+.field input,.field select{width:100%;background:var(--asphalt2);border:1px solid var(--border);color:var(--lane);
+  padding:8px 10px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:14px;}
+.field .unit{font-size:10px;color:var(--lane-dim);margin-top:5px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+@media(max-width:640px){.row2{grid-template-columns:1fr;}}
+.runbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+#runBtn{background:var(--amber);color:#15171a;border:none;padding:13px 28px;border-radius:6px;
+  font-weight:700;font-size:14px;cursor:pointer;font-family:Inter,sans-serif;}
+#runBtn:hover{filter:brightness(1.08);}
+#runBtn:disabled{opacity:.5;cursor:default;}
+.runstatus{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--lane-dim);}
+
+#resultsArea{display:none;}
+.legend{display:flex;gap:22px;align-items:center;margin-bottom:18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--lane-dim);}
+.legend .swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:middle;}
+.clockbar{display:flex;align-items:center;gap:14px;margin-bottom:18px;font-family:'JetBrains Mono',monospace;font-size:13px;}
+.clockbar .clock{color:var(--amber);}
+.clockbar button{background:var(--card);border:1px solid var(--border);color:var(--lane);
+  padding:7px 14px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;}
+.clockbar button:hover{border-color:var(--amber);}
+.replay-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:720px){.replay-grid{grid-template-columns:1fr;}}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;}
+.panel .ptitle{font-weight:700;font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;}
+.panel .ptitle .queue{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--lane-dim);font-weight:400;}
+.panel svg{width:100%;height:auto;display:block;background:var(--asphalt2);border-radius:6px;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px;}
+@media(max-width:720px){.stat-grid{grid-template-columns:1fr 1fr;}}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;}
+.stat-card h4{margin:0 0 12px;font-size:12px;color:var(--lane-dim);font-weight:600;font-family:'JetBrains Mono',monospace;}
+.stat-card .vals{display:flex;justify-content:space-between;align-items:baseline;}
+.stat-card .vals div{text-align:center;flex:1;}
+.stat-card .vals .n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;}
+.stat-card .vals .n.f{color:var(--red);}
+.stat-card .vals .n.a{color:var(--green);}
+.stat-card .vals .l{font-size:10px;color:var(--lane-dim);margin-top:3px;}
+.stat-card.wide{grid-column:1/-1;}
+
+.note{font-size:12px;color:var(--lane-dim);line-height:1.6;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);}
+footer{padding:32px 24px;text-align:center;color:var(--lane-dim);font-size:13px;}
+footer a{color:var(--amber);text-decoration:none;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Set the traffic. Watch it decide.</h1>
+  <p>Enter how many vehicles arrive from each direction &mdash; and how many are emergency vehicles,
+  if you want to test that too. A live intersection runs both controllers on your exact numbers.</p>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>1. Set the traffic</h2>
+    <p class="sub">Vehicles per hour, per approach. Turns are assigned automatically using the same
+    72% straight / 12% left / 16% right split our validated results are built on.</p>
+    <div class="form-grid">
+      <div class="field"><label>NORTH</label><input type="number" id="inN" value="190" min="0" max="1200"><div class="unit">veh/hour</div></div>
+      <div class="field"><label>SOUTH</label><input type="number" id="inS" value="190" min="0" max="1200"><div class="unit">veh/hour</div></div>
+      <div class="field"><label>EAST</label><input type="number" id="inE" value="490" min="0" max="1200"><div class="unit">veh/hour</div></div>
+      <div class="field"><label>WEST</label><input type="number" id="inW" value="490" min="0" max="1200"><div class="unit">veh/hour</div></div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>EMERGENCY VEHICLES (optional)</label>
+        <input type="number" id="inEmg" value="0" min="0" max="10">
+        <div class="unit">total in this run, at random times and approaches</div>
+      </div>
+      <div class="field">
+        <label>SIMULATE FOR</label>
+        <select id="inDuration">
+          <option value="120">2 minutes</option>
+          <option value="180" selected>3 minutes</option>
+          <option value="300">5 minutes</option>
+        </select>
+        <div class="unit">real time represented; plays back in seconds</div>
+      </div>
+    </div>
+    <div class="runbar">
+      <button id="runBtn">&#9654; Run simulation</button>
+      <span class="runstatus" id="runStatus"></span>
+    </div>
+  </div>
+</section>
+
+<section id="resultsArea">
+  <div class="wrap">
+    <h2>2. Watch it run</h2>
+    <p class="sub">Both controllers run on the identical generated traffic &mdash; same vehicles, same arrival times, same emergency vehicles.</p>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--car);"></span>vehicle</span>
+      <span><span class="swatch" style="background:var(--red);"></span>emergency vehicle</span>
+      <span><span class="swatch" style="background:var(--green);"></span>green axis</span>
+    </div>
+    <div class="clockbar">
+      <button id="pauseBtn">&#10074;&#10074; Pause</button>
+      <button id="speedBtn">1&times; speed</button>
+      <button id="replayBtn">&#8634; Replay</button>
+      <span class="clock">t = <span id="clockVal">0</span>s / <span id="durVal">0</span>s</span>
+    </div>
+    <div class="replay-grid">
+      <div class="panel">
+        <div class="ptitle">FIXED-TIME <span class="queue">queued: <b id="fixedTotal">0</b></span></div>
+        <svg id="fixedSvg" viewBox="0 0 340 340"></svg>
+      </div>
+      <div class="panel">
+        <div class="ptitle">ADAPTIVE <span class="queue">queued: <b id="adaptiveTotal">0</b></span></div>
+        <svg id="adaptiveSvg" viewBox="0 0 340 340"></svg>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="statGrid" style="display:none;">
+      <div class="stat-card">
+        <h4>AVG WAITING TIME</h4>
+        <div class="vals"><div><div class="n f" id="statWaitF">--</div><div class="l">fixed</div></div><div><div class="n a" id="statWaitA">--</div><div class="l">adaptive</div></div></div>
+      </div>
+      <div class="stat-card">
+        <h4>AVG QUEUE LENGTH</h4>
+        <div class="vals"><div><div class="n f" id="statQueueF">--</div><div class="l">fixed</div></div><div><div class="n a" id="statQueueA">--</div><div class="l">adaptive</div></div></div>
+      </div>
+      <div class="stat-card">
+        <h4>WORST SINGLE WAIT</h4>
+        <div class="vals"><div><div class="n f" id="statMaxF">--</div><div class="l">fixed</div></div><div><div class="n a" id="statMaxA">--</div><div class="l">adaptive</div></div></div>
+      </div>
+      <div class="stat-card wide" id="emgCard" style="display:none;">
+        <h4>EMERGENCY VEHICLES</h4>
+        <div class="vals">
+          <div><div class="n f" id="statEmgF">--</div><div class="l">fixed &mdash; avg wait</div></div>
+          <div><div class="n a" id="statEmgA">--</div><div class="l">adaptive &mdash; avg wait</div></div>
+          <div><div class="n" id="statPreempt" style="color:var(--amber)">--</div><div class="l">preemptions triggered</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      This runs a JavaScript reimplementation of our controller's decision rule &mdash; the same
+      minimum/maximum green times, queue+wait priority score, and beacon-preemption logic as the
+      Python/TraCI version &mdash; simplified for instant, in-browser use rather than running full SUMO. Emergency vehicles can pass queued cars on both sides, as they would on a two-lane road; what differs is whether the signal turns green for them. The adaptive controller gets about 10 seconds of beacon warning before an emergency vehicle arrives, standing in for the 150 m detection range in our SUMO setup.
+    </div>
+  </div>
+</section>
+
+<footer>
+  Adaptive Traffic Signal Control &mdash; Minor Project, Batch B1 &middot;
+  <a href="https://github.com/dewanshi-goel/adaptive-traffic-signal-control" target="_blank">github.com/dewanshi-goel/adaptive-traffic-signal-control</a>
+</footer>
+
+<script>
+window.addEventListener('error',function(e){var s=document.getElementById('runStatus');if(s){s.textContent='Script error: '+e.message+' (line '+e.lineno+')';}});
+</script>
+<script>
+(function(){
+const APPROACHES = ['N','S','E','W'];
+const AXIS = { NS:['N','S'], EW:['E','W'] };
+const MIN_GREEN=10, MAX_GREEN=60, MAX_RED_WAIT=60, WAIT_WEIGHT=0.05, DISCHARGE_EVERY=2;
+const TURN_SPLIT = [['straight',0.72],['left',0.12],['right',0.16]];
+const TURN_MAP = {
+  N:{straight:'S', left:'E', right:'W'},
+  S:{straight:'N', left:'W', right:'E'},
+  E:{straight:'W', left:'N', right:'S'},
+  W:{straight:'E', left:'S', right:'N'},
+};
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function pickTurn(rand){
+  let r = rand(), acc=0;
+  for(const [name,p] of TURN_SPLIT){ acc+=p; if(r<=acc) return name; }
+  return 'straight';
+}
+
+function buildArrivals(rand, rates, emgRate, duration){
+  let nextId = 1;
+  const vehicles = {};
+  const arrivals = {}; APPROACHES.forEach(a=>arrivals[a]=[]);
+  const emgSched = {};
+  const nEmg = Math.floor(emgRate);
+  const lastT = Math.max(10, duration-60);
+  for(let i=0;i<nEmg;i++){
+    const t = 5 + Math.floor(rand()*(lastT-5));
+    const a = APPROACHES[Math.floor(rand()*4)];
+    (emgSched[t] = emgSched[t]||[]).push(a);
+  }
+  for(let t=0;t<duration;t++){
+    APPROACHES.forEach(a=>{
+      if(rand() < rates[a]/3600){
+        const id = nextId++;
+        vehicles[id] = {approach:a, turn:pickTurn(rand), emg:false, spawn:t};
+        arrivals[a].push(id);
+      }
+    });
+    (emgSched[t]||[]).forEach(a=>{
+      const id = nextId++;
+      vehicles[id] = {approach:a, turn:pickTurn(rand), emg:true, spawn:t};
+      arrivals[a].push(id);
+    });
+  }
+  return {arrivals, vehicles};
+}
+
+function runController(kind, arrivals, vehicles, duration){
+  const queue = {N:[],S:[],E:[],W:[]};
+  const arrivalPtr = {N:0,S:0,E:0,W:0};
+  const dischargeCounter = {N:0,S:0,E:0,W:0};
+  let phase=0, phaseElapsed=0, greenElapsed=0, preemptions=0;
+  const waits = []; const emgWaits = [];
+  const snapshots = [];
+
+  function approachesFor(axisKey){ return AXIS[axisKey]; }
+  function stats(axisKey, now){
+    let q=0, totalWait=0, mw=0;
+    approachesFor(axisKey).forEach(a=>{
+      q += queue[a].length;
+      queue[a].forEach(id=>{ const w = now - vehicles[id].spawn; totalWait+=w; if(w>mw) mw=w; });
+    });
+    return {q, totalWait, mw};
+  }
+  const DETECT_LEAD = 10; // seconds of beacon warning, stands in for the 150 m detection range
+  const emgList = Object.keys(vehicles).filter(id=>vehicles[id].emg).map(id=>({a:vehicles[id].approach, t:vehicles[id].spawn}));
+  function anyEmergency(axisKey, now){
+    return approachesFor(axisKey).some(a=>queue[a].some(id=>vehicles[id].emg)) ||
+      emgList.some(e=>approachesFor(axisKey).includes(e.a) && e.t>now && e.t-now<=DETECT_LEAD);
+  }
+
+  for(let now=0; now<duration; now++){
+    APPROACHES.forEach(a=>{
+      while(arrivalPtr[a] < arrivals[a].length && vehicles[arrivals[a][arrivalPtr[a]]].spawn === now){
+        const vid = arrivals[a][arrivalPtr[a]];
+        if(vehicles[vid].emg) queue[a].unshift(vid); else queue[a].push(vid);
+        arrivalPtr[a]++;
+      }
+    });
+
+    const departures = [];
+    const greenAxis = phase===0 ? 'NS' : (phase===2 ? 'EW' : null);
+    if(greenAxis){
+      approachesFor(greenAxis).forEach(a=>{
+        if(queue[a].length>0){
+          dischargeCounter[a]++;
+          if(dischargeCounter[a] >= DISCHARGE_EVERY){
+            dischargeCounter[a]=0;
+            const id = queue[a].shift();
+            const w = now - vehicles[id].spawn;
+            waits.push(w); if(vehicles[id].emg) emgWaits.push(w);
+            departures.push(id);
+          }
+        } else dischargeCounter[a]=0;
+      });
+    }
+
+    phaseElapsed++;
+    if(phase===0||phase===2){
+      greenElapsed++;
+      if(kind==='adaptive'){
+        const gAxis = greenAxis, rAxis = gAxis==='NS'?'EW':'NS';
+        const emgOnGreen = anyEmergency(gAxis,now), emgOnRed = anyEmergency(rAxis,now);
+        if(!emgOnGreen && greenElapsed>=2 && emgOnRed){
+          phase++; phaseElapsed=0; greenElapsed=0; preemptions++;
+        } else if(!emgOnGreen && greenElapsed>=MIN_GREEN){
+          const g=stats(gAxis,now), r=stats(rAxis,now);
+          const gScore=g.q+WAIT_WEIGHT*g.totalWait, rScore=r.q+WAIT_WEIGHT*r.totalWait;
+          if(r.mw>=MAX_RED_WAIT || (greenElapsed>=MAX_GREEN && r.q>0) || rScore>1.5*gScore+1){
+            phase++; phaseElapsed=0; greenElapsed=0;
+          }
+        }
+      } else {
+        if(phaseElapsed>=42){ phase++; phaseElapsed=0; greenElapsed=0; }
+      }
+    } else {
+      if(phaseElapsed>=3){ phase = phase===1?2:0; phaseElapsed=0; greenElapsed=0; }
+    }
+
+    snapshots.push({
+      t:now,
+      queue:{N:queue.N.slice(),S:queue.S.slice(),E:queue.E.slice(),W:queue.W.slice()},
+      departures, greenAxis
+    });
+  }
+
+  const avgWait = waits.length? waits.reduce((a,b)=>a+b,0)/waits.length : 0;
+  const maxWait = waits.length? Math.max(...waits) : 0;
+  const avgQueue = snapshots.reduce((s,r)=>s+r.queue.N.length+r.queue.S.length+r.queue.E.length+r.queue.W.length,0)/snapshots.length;
+  const emgAvg = emgWaits.length? emgWaits.reduce((a,b)=>a+b,0)/emgWaits.length : 0;
+  return {snapshots, avgWait, avgQueue, maxWait, emgAvg, emgCount: emgWaits.length, preemptions};
+}
+
+const CX=170, CY=170;
+const STOP = { N:[170,130], S:[170,210], E:[210,170], W:[130,170] };
+const EXIT = { N:[170,90],  S:[170,250], E:[250,170], W:[90,170] };
+const QUEUE_DIR = { N:[0,-1], S:[0,1], E:[1,0], W:[-1,0] };
+const SLOT_GAP = 15;
+const TRANSIT_TICKS = 3;
+const CAR_W=8, CAR_H=13;
+
+function bezier(p0,p1,p2,f){
+  const x=(1-f)*(1-f)*p0[0]+2*(1-f)*f*p1[0]+f*f*p2[0];
+  const y=(1-f)*(1-f)*p0[1]+2*(1-f)*f*p1[1]+f*f*p2[1];
+  return [x,y];
+}
+function angleFor(approach){
+  const dirs = {N:180, S:0, E:270, W:90};
+  return dirs[approach];
+}
+
+function drawStatic(svg){
+  const ns='http://www.w3.org/2000/svg';
+  svg.innerHTML='';
+  const roadW=70;
+  const mkRect=(x,y,w,h,fill)=>{const r=document.createElementNS(ns,'rect');
+    r.setAttribute('x',x);r.setAttribute('y',y);r.setAttribute('width',w);r.setAttribute('height',h);
+    r.setAttribute('fill',fill); return r;};
+  svg.appendChild(mkRect(0,CY-roadW/2,340,roadW,'var(--road)'));
+  svg.appendChild(mkRect(CX-roadW/2,0,roadW,340,'var(--road)'));
+  [[0,CY,340,CY],[CX,0,CX,340]].forEach(([x1,y1,x2,y2])=>{
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+    l.setAttribute('stroke','#3a3e44');l.setAttribute('stroke-width',1.5);l.setAttribute('stroke-dasharray','6,6');
+    svg.appendChild(l);
+  });
+  Object.entries(STOP).forEach(([a,[x,y]])=>{
+    const l=document.createElementNS(ns,'line');
+    const horiz = (a==='N'||a==='S');
+    l.setAttribute('x1', horiz? x-roadW/2 : x); l.setAttribute('y1', horiz? y : y-roadW/2);
+    l.setAttribute('x2', horiz? x+roadW/2 : x); l.setAttribute('y2', horiz? y : y+roadW/2);
+    l.setAttribute('stroke','#55595f'); l.setAttribute('stroke-width',3);
+    svg.appendChild(l);
+  });
+  ['NS','EW'].forEach(ax=>{
+    const c=document.createElementNS(ns,'circle');
+    const pos = ax==='NS' ? [CX+20,CY-20] : [CX+20,CY+20];
+    c.setAttribute('cx',pos[0]); c.setAttribute('cy',pos[1]); c.setAttribute('r',6);
+    c.setAttribute('id', svg.id+'_light_'+ax);
+    c.setAttribute('fill','var(--red)');
+    svg.appendChild(c);
+  });
+  const g=document.createElementNS(ns,'g'); g.setAttribute('id',svg.id+'_cars'); svg.appendChild(g);
+}
+
+function renderFrame(svg, snap, vehicles, transitingMap){
+  const ns='http://www.w3.org/2000/svg';
+  document.getElementById(svg.id+'_light_NS').setAttribute('fill', snap.greenAxis==='NS'?'var(--green)':'var(--red)');
+  document.getElementById(svg.id+'_light_EW').setAttribute('fill', snap.greenAxis==='EW'?'var(--green)':'var(--red)');
+  const g = document.getElementById(svg.id+'_cars');
+  g.innerHTML='';
+
+  function drawCar(x,y,angle,emg){
+    const r=document.createElementNS(ns,'rect');
+    r.setAttribute('x',-CAR_W/2); r.setAttribute('y',-CAR_H/2);
+    r.setAttribute('width',CAR_W); r.setAttribute('height',CAR_H);
+    r.setAttribute('rx',2);
+    r.setAttribute('fill', emg? 'var(--red)':'var(--car)');
+    r.setAttribute('transform', `translate(${x},${y}) rotate(${angle})`);
+    if(emg){ r.setAttribute('stroke','#fff'); r.setAttribute('stroke-width',1); }
+    g.appendChild(r);
+  }
+
+  APPROACHES.forEach(a=>{
+    const [dx,dy]=QUEUE_DIR[a]; const [sx,sy]=STOP[a];
+    snap.queue[a].forEach((id,i)=>{
+      const v=vehicles[id];
+      const x = sx + dx*(SLOT_GAP*(i+1)), y = sy + dy*(SLOT_GAP*(i+1));
+      drawCar(x,y,angleFor(a),v.emg);
+    });
+  });
+
+  transitingMap.forEach((info, id)=>{
+    const v=vehicles[id];
+    const frac = Math.min(1, info.age/TRANSIT_TICKS);
+    const [x,y] = bezier(STOP[v.approach], [CX,CY], EXIT[TURN_MAP[v.approach][v.turn]], frac);
+    drawCar(x,y,angleFor(v.approach),v.emg);
+  });
+}
+
+let FIXED, ADAPTIVE, VEHICLES, N_STEPS, idx=0, timer=null, speed=1;
+let transitF = new Map(), transitA = new Map();
+
+function stepTransit(map, snap){
+  for(const [id,info] of map){ info.age++; if(info.age>TRANSIT_TICKS) map.delete(id); }
+  snap.departures.forEach(id=>map.set(id,{age:0}));
+}
+
+function render(i){
+  const f=FIXED.snapshots[i], a=ADAPTIVE.snapshots[i];
+  document.getElementById('clockVal').textContent = f.t;
+  document.getElementById('fixedTotal').textContent = f.queue.N.length+f.queue.S.length+f.queue.E.length+f.queue.W.length;
+  document.getElementById('adaptiveTotal').textContent = a.queue.N.length+a.queue.S.length+a.queue.E.length+a.queue.W.length;
+  stepTransit(transitF,f); stepTransit(transitA,a);
+  renderFrame(document.getElementById('fixedSvg'), f, VEHICLES, transitF);
+  renderFrame(document.getElementById('adaptiveSvg'), a, VEHICLES, transitA);
+}
+
+function tick(){
+  idx++;
+  if(idx>=N_STEPS){ idx=N_STEPS-1; stop(); revealStats(); return; }
+  render(idx);
+}
+function play(){ if(timer) clearInterval(timer); timer=setInterval(tick, 100/speed);
+  document.getElementById('pauseBtn').innerHTML='&#10074;&#10074; Pause'; }
+function stop(){ if(timer) clearInterval(timer); timer=null;
+  document.getElementById('pauseBtn').innerHTML='&#9654; Play'; }
+document.getElementById('pauseBtn').addEventListener('click', ()=>{ timer? stop() : play(); });
+document.getElementById('speedBtn').addEventListener('click', ()=>{
+  speed = speed===1?2:(speed===2?4:1);
+  document.getElementById('speedBtn').textContent=speed+'\u00d7 speed';
+  if(timer) play();
+});
+document.getElementById('replayBtn').addEventListener('click', ()=>{
+  idx=0; transitF=new Map(); transitA=new Map();
+  document.getElementById('statGrid').style.display='none';
+  render(0); play();
+});
+
+function revealStats(){
+  document.getElementById('statGrid').style.display='';
+  document.getElementById('statWaitF').textContent = FIXED.avgWait.toFixed(1)+'s';
+  document.getElementById('statWaitA').textContent = ADAPTIVE.avgWait.toFixed(1)+'s';
+  document.getElementById('statQueueF').textContent = FIXED.avgQueue.toFixed(1);
+  document.getElementById('statQueueA').textContent = ADAPTIVE.avgQueue.toFixed(1);
+  document.getElementById('statMaxF').textContent = FIXED.maxWait.toFixed(0)+'s';
+  document.getElementById('statMaxA').textContent = ADAPTIVE.maxWait.toFixed(0)+'s';
+  const emgRate = +document.getElementById('inEmg').value||0;
+  const emgCard=document.getElementById('emgCard');
+  if(emgRate>0){
+    emgCard.style.display='';
+    document.getElementById('statEmgF').textContent = FIXED.emgCount? FIXED.emgAvg.toFixed(1)+'s':'n/a';
+    document.getElementById('statEmgA').textContent = ADAPTIVE.emgCount? ADAPTIVE.emgAvg.toFixed(1)+'s':'n/a';
+    document.getElementById('statPreempt').textContent = ADAPTIVE.preemptions;
+  } else emgCard.style.display='none';
+}
+
+document.getElementById('runBtn').addEventListener('click', ()=>{
+  const rates = {
+    N:Math.max(0,+document.getElementById('inN').value||0),
+    S:Math.max(0,+document.getElementById('inS').value||0),
+    E:Math.max(0,+document.getElementById('inE').value||0),
+    W:Math.max(0,+document.getElementById('inW').value||0),
+  };
+  const emgRate = Math.max(0,+document.getElementById('inEmg').value||0);
+  const duration = +document.getElementById('inDuration').value;
+  document.getElementById('runStatus').textContent='running...';
+  document.getElementById('runBtn').disabled=true;
+
+  setTimeout(()=>{
+    const rand = mulberry32(Date.now()&0xffffffff);
+    const {arrivals, vehicles} = buildArrivals(rand, rates, emgRate, duration);
+    VEHICLES = vehicles;
+    FIXED = runController('fixed', arrivals, vehicles, duration);
+    ADAPTIVE = runController('adaptive', arrivals, vehicles, duration);
+    N_STEPS = Math.min(FIXED.snapshots.length, ADAPTIVE.snapshots.length);
+
+    drawStatic(document.getElementById('fixedSvg'));
+    drawStatic(document.getElementById('adaptiveSvg'));
+    transitF=new Map(); transitA=new Map();
+    idx=0; render(0);
+    document.getElementById('durVal').textContent = duration;
+    document.getElementById('statGrid').style.display='none';
+
+    document.getElementById('resultsArea').style.display='block';
+    document.getElementById('runStatus').textContent='';
+    document.getElementById('runBtn').disabled=false;
+    document.getElementById('resultsArea').scrollIntoView({behavior:'smooth',block:'start'});
+    play();
+  },30);
+});
+})();
+</script>
+</body>
+</html>

@@ -7,3 +7,7 @@ max_wait_any_vehicle_s,57.0
 worst_approach_avg_wait_s,11.420408163265305
 unfinished_veh,0.0
 sim_end_time_s,3674.0
+emergency_count,0.0
+emergency_avg_wait_s,0.0
+emergency_max_wait_s,0.0
+preemption_count,0.0

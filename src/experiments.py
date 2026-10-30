@@ -1,9 +1,10 @@
 import os
 import pandas as pd
-from scenarios import write_all
+from scenarios import write_all, SCENARIOS
 from run_sim import run, OUT
 
-SEEDS = range(1, 6)     
+SEEDS = range(1, 11)
+MODES = ("fixed", "tuned", "adaptive")
 METRICS = ["avg_waiting_time_s", "avg_queue_length_veh", "avg_travel_time_s",
            "throughput_veh_in_first_hour", "max_wait_any_vehicle_s",
            "worst_approach_avg_wait_s", "unfinished_veh"]
@@ -14,8 +15,9 @@ def main():
     records = []
     for name, path in paths.items():
         for seed in SEEDS:
-            for mode in ("fixed", "adaptive"):
-                s = run(mode, seed=seed, route_file=path, save=False, verbose=False)
+            for mode in MODES:
+                s = run(mode, seed=seed, route_file=path, save=False,
+                        verbose=False, volumes=SCENARIOS[name])
                 s.update(scenario=name, seed=seed, mode=mode)
                 records.append(s)
                 print(f"done: {name}, seed {seed}, {mode}")
