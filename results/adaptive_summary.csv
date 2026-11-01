@@ -11,3 +11,5 @@ emergency_count,0.0
 emergency_avg_wait_s,0.0
 emergency_max_wait_s,0.0
 preemption_count,0.0
+emergency_clear_max_s,0.0
+emergency_clear_mean_s,0.0

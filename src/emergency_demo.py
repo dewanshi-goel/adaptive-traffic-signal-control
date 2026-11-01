@@ -28,7 +28,7 @@ def main():
     df.to_csv(os.path.join(OUT, "emergency_raw.csv"), index=False)
     cols = ["avg_waiting_time_s", "max_wait_any_vehicle_s", "worst_approach_avg_wait_s",
             "emergency_count", "emergency_avg_wait_s", "emergency_max_wait_s",
-            "preemption_count", "unfinished_veh"]
+            "preemption_count", "unfinished_veh", "emergency_clear_max_s", "emergency_clear_mean_s", "override_max_s"]
     summary = df.groupby("mode")[cols].mean().round(2)
     print(summary.to_string())
     summary.to_csv(os.path.join(OUT, "emergency_summary.csv"))

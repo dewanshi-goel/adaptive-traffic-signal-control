@@ -1,0 +1,6 @@
+condition,avg_wait,worst_approach,stop_mean,stop_worst,emg_count,emg_avg_wait,emg_worst_wait,override_max,unfinished
+none,3.45,3.69,17.2,19.0,0.0,0.0,0.0,0.0,0.0
+capped_120,5.29,6.88,29.6,36.0,120.2,0.5,11.0,20.0,0.0
+uncapped_120,6.09,7.72,43.8,65.0,120.2,0.0,1.0,64.0,0.0
+capped_360,8.56,12.33,27.2,32.0,350.2,0.99,12.0,20.0,0.0
+uncapped_360,33.61,55.44,75.2,87.0,350.2,0.0,2.0,85.0,0.0

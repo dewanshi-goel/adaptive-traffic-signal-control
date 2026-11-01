@@ -25,7 +25,11 @@ MIN_GREEN = 10
 MAX_GREEN = 60
 MAX_RED_WAIT = 60
 WAIT_WEIGHT = 0.05
+SWITCH_MARGIN = 1.5
+SWITCH_OFFSET = 1
 DETECTION_RANGE = 150
+EMERGENCY_CAP = 20        # s, longest one emergency override may hold
+EMERGENCY_COOLDOWN = 10   # s, normal rules only, before the next override
 
 # ---- demand-matched fixed-time baseline settings ----
 CYCLE_GREEN = 84          # same total green as the default 42 + 42
@@ -70,6 +74,9 @@ class AdaptiveController:
         self.green_elapsed = 0
         self.emergency_aware = emergency_aware
         self.preemptions = []
+        self.override_start = None
+        self.cooldown_until = 0.0
+        self.override_log = []
         self._lane_len_cache = {}
 
     def lane_length(self, edge):
@@ -112,13 +119,25 @@ class AdaptiveController:
         other = 2 if phase == 0 else 0
 
         if self.emergency_aware:
-            if self.emergency_near(AXES[phase]):
-                return
-            if self.green_elapsed >= 2 and self.emergency_near(AXES[other]):
-                traci.trafficlight.setPhase(TL, phase + 1)
-                traci.trafficlight.setPhaseDuration(TL, 3)
-                self.preemptions.append((now, phase, other))
-                return
+            if self.override_start is not None:
+                ended = (now - self.override_start >= EMERGENCY_CAP
+                        or not self.emergency_near(AXES[phase]))
+                if ended:
+                    self.override_log.append(now - self.override_start)
+                    self.override_start = None
+                    self.cooldown_until = now + EMERGENCY_COOLDOWN
+                else:
+                    return
+            if now >= self.cooldown_until:
+                if self.emergency_near(AXES[phase]):
+                    self.override_start = now
+                    return
+                if self.green_elapsed >= 2 and self.emergency_near(AXES[other]):
+                    traci.trafficlight.setPhase(TL, phase + 1)
+                    traci.trafficlight.setPhaseDuration(TL, 3)
+                    self.preemptions.append((now, phase, other))
+                    self.override_start = now
+                    return
 
         if self.green_elapsed < MIN_GREEN:
             return
@@ -130,7 +149,7 @@ class AdaptiveController:
 
         starving = r_max >= MAX_RED_WAIT
         overrun = self.green_elapsed >= MAX_GREEN and r_queue > 0
-        red_needs_it_more = r_score > 1.5 * g_score + 1
+        red_needs_it_more = r_score > SWITCH_MARGIN * g_score + SWITCH_OFFSET
 
         if starving or overrun or red_needs_it_more:
             traci.trafficlight.setPhase(TL, phase + 1)
@@ -164,10 +183,23 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True,
     step = 0
     now = 0
 
+    emg_seen, emg_clear = {}, []
+    streak, max_streak = {}, 0.0
     while traci.simulation.getMinExpectedNumber() > 0 and step < MAX_STEPS:
         traci.simulationStep()
         step += 1
         now = traci.simulation.getTime()
+        for vid in traci.vehicle.getIDList():
+            if vtype.get(vid) != "emergency":
+                continue
+            road = traci.vehicle.getRoadID(vid)
+            if road in INCOMING:
+                dist = traci.lane.getLength(road + "_0") - traci.vehicle.getLanePosition(vid)
+                if dist <= DETECTION_RANGE and vid not in emg_seen:
+                    emg_seen[vid] = now
+            elif emg_seen.get(vid) is not None:
+                emg_clear.append(now - emg_seen[vid])
+                emg_seen[vid] = None
 
         for vid in traci.simulation.getDepartedIDList():
             depart[vid] = now
@@ -178,6 +210,11 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True,
         for vid in traci.vehicle.getIDList():
             if traci.vehicle.getSpeed(vid) < 0.1:
                 waiting[vid] += 1.0
+                streak[vid] = streak.get(vid, 0.0) + 1.0
+                if vtype.get(vid) != "emergency":
+                    max_streak = max(max_streak, streak[vid])
+            else:
+                streak[vid] = 0.0
 
         for vid in traci.simulation.getArrivedIDList():
             travel_times.append(now - depart[vid])
@@ -218,6 +255,10 @@ def run(mode, seed=42, route_file=None, save=True, verbose=True,
         "emergency_avg_wait_s": sum(emg_waits) / len(emg_waits) if emg_waits else 0.0,
         "emergency_max_wait_s": max(emg_waits) if emg_waits else 0.0,
         "preemption_count": len(getattr(controller, "preemptions", [])),
+        "override_max_s": max(getattr(controller, "override_log", []) or [0]),
+        "emergency_clear_max_s": max(emg_clear) if emg_clear else 0.0,
+        "emergency_clear_mean_s": sum(emg_clear) / len(emg_clear) if emg_clear else 0.0,
+        "max_continuous_stop_s": max_streak,
     }
 
     if save:
