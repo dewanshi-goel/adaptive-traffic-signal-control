@@ -121,3 +121,5 @@ Minimum green, maximum green and yellow follow the Indian Roads Congress guideli
 
 - Experiments use random arrivals (a vehicle enters each approach with a probability set by its hourly flow). The default `sumo/routes.rou.xml` uses evenly spaced arrivals at the same hourly flows, so a single run with it gives lower waits than the 10-seed averages above.
 - `simulator.html` is a simplified browser demonstration. The reported results come from SUMO runs.
+
+<p align="center">Designed and Implemented by <a href="https://github.com/dewanshi-goel">Dewanshi</a></p>
